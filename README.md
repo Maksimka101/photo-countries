@@ -1,7 +1,7 @@
-# Где я был (Where I've been)
+# Where I've been
 
 An app that works out which countries you have been to and how many days you spent in each — from the
-time and geotags of your photos. The interface is in Russian.
+time and geotags of your photos
 
 - **Sources:** Yandex Disk and/or the phone gallery (at least one is required, the other can be added later).
 - **Countries:** a list of countries with total days and number of visits; tap a country to see its trips
