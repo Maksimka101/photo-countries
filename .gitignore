@@ -1,0 +1,14 @@
+.gradle/
+.kotlin/
+build/
+local.properties
+*.apk
+.idea/
+*.iml
+__pycache__/
+
+# Личное и тяжёлое из прототипа: токен, реальные координаты фото, личный список игноров, исходные полигоны
+.token
+meta.json
+prototype/ignore.txt
+countries.geojson

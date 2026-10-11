@@ -1,0 +1,68 @@
+<resources>
+    <string name="app_title">Где я был</string>
+    <string name="tab_countries">Страны</string>
+    <string name="tab_timeline">Таймлайн</string>
+    <string name="tab_years">Годы</string>
+
+    <string name="refresh">Обновить</string>
+    <string name="sources">Источники</string>
+    <string name="close">Закрыть</string>
+    <string name="cancel">Отмена</string>
+    <string name="reload_title">Загрузить всё заново?</string>
+    <string name="reload_text">Новые фото добавляются сами при каждом открытии приложения.\n\nПолное обновление заново прочитает все фото из подключённых источников. Оно нужно, чтобы из ленты пропали удалённые фото.</string>
+    <string name="reload_confirm">Загрузить всё</string>
+    <string name="status_checking">Проверяем новые фото…</string>
+    <string name="status_loading">Читаем диск… %1$d файлов</string>
+    <string name="status_gallery">Читаем галерею… %1$d фото</string>
+    <string name="status_updated">Обновлено %1$s · %2$d точек</string>
+    <string name="status_lost">вне стран: %1$d</string>
+    <string name="error_unauthorized">Диск не принял токен — войдите заново</string>
+    <string name="error_gallery">Нет доступа к галерее — разрешите его в источниках</string>
+    <string name="error_failed">Не удалось обновить — показаны прошлые данные</string>
+    <string name="empty">Фото с геометками не нашлось</string>
+
+    <string name="sources_title">Источники фото</string>
+    <string name="sources_about">Откуда брать время и место съёмки. Нужен хотя бы один источник, второй можно подключить позже. Сами фото никуда не отправляются.</string>
+    <string name="sources_done">Готово</string>
+    <string name="source_connected">Подключено</string>
+    <string name="source_disconnect">Отключить</string>
+    <string name="disk_title">Яндекс Диск</string>
+    <string name="gallery_title">Галерея телефона</string>
+    <string name="gallery_about">Приложение читает время и координаты фото из папки камеры (DCIM) прямо на телефоне. Первое чтение большой галереи может занять несколько минут.</string>
+    <string name="gallery_connect">Подключить галерею</string>
+    <string name="gallery_allow">Разрешить доступ</string>
+    <string name="gallery_denied">Нет доступа. Разрешите приложению фото и данные о месте съёмки — в запросе системы или в настройках приложения.</string>
+    <string name="login_about">Приложение читает только время и координаты фото из списка файлов диска. Сами фото не скачиваются, координаты никуда не отправляются.</string>
+    <string name="login_browser">Войти через Яндекс</string>
+    <string name="login_no_client">Вход через браузер пока не работает: OAuth-клиент ещё не зарегистрирован (пустой YANDEX_CLIENT_ID). Вставьте токен ниже.</string>
+    <string name="login_token_label">OAuth-токен</string>
+    <string name="login_token_save">Сохранить токен</string>
+
+    <string name="sort_days">По дням</string>
+    <string name="sort_recent">По последнему визиту</string>
+    <string name="only_transit">только транзит</string>
+
+    <string name="kind_transit">транзит</string>
+    <string name="kind_short_visit">заезд</string>
+    <string name="hole">дыра %1$d дн.</string>
+    <string name="days_exact">%1$d дн.</string>
+    <string name="days_range">%1$d–%2$d дн.</string>
+    <string name="stay_line">%1$s · %2$s · %3$d фото</string>
+    <string name="detail_dates">Фото: %1$s (UTC)</string>
+    <string name="detail_days_exact">Дней: %1$d</string>
+    <string name="detail_days_range">Дней: от %1$d до %2$d (с днями без фото до соседних пребываний)</string>
+    <string name="detail_photos">Фото: %1$d</string>
+    <string name="detail_hole">Внутри %1$d дн. подряд без фото</string>
+    <string name="detail_transit">Транзит: в счёт визитов не идёт</string>
+    <string name="detail_short_visit">Заезд: меньше суток, до и после одна и та же страна</string>
+
+    <string name="hide">Скрыть</string>
+    <string name="hide_hint">«Скрыть» — для чужих фото: пребывание пропадёт из ленты и из всех итогов.</string>
+    <string name="hidden_count">Скрытые: %1$d</string>
+    <string name="hidden_title">Скрытые пребывания</string>
+    <string name="unhide">Вернуть</string>
+
+    <string name="other_countries">остальные</string>
+    <string name="no_photos">нет фото</string>
+    <string name="months">ЯФМАМИИАСОНД</string>
+</resources>
