@@ -1,38 +1,40 @@
-# Где я был
+# Где я был (Where I've been)
 
-Приложение считает, в каких странах и сколько дней вы провели, — по времени и геометкам ваших фото.
+An app that works out which countries you have been to and how many days you spent in each — from the
+time and geotags of your photos. The interface is in Russian.
 
-- **Источники:** Яндекс Диск и/или галерея телефона (нужен хотя бы один, второй подключается позже).
-- **Страны:** список стран с суммой дней и числом визитов.
-- **Таймлайн:** лента пребываний по годам; транзиты и короткие заезды помечены, чужие фото можно скрыть вручную.
-- **Годы:** год как полоса дней в цветах стран; тап по стране показывает даты и длительность.
+- **Sources:** Yandex Disk and/or the phone gallery (at least one is required, the other can be added later).
+- **Countries:** a list of countries with total days and number of visits.
+- **Timeline:** stays grouped by year; transits and short visits are marked, and stays that come from
+  someone else's photos can be hidden by hand.
+- **Years:** each year as a strip of days coloured by country; tap a country to see the dates and length of the stay.
 
-| Страны | Таймлайн | Годы |
+| Countries | Timeline | Years |
 |---|---|---|
-| ![Страны](docs/countries.jpg) | ![Таймлайн](docs/timeline.jpg) | ![Годы](docs/years.jpg) |
+| ![Countries](docs/countries.jpg) | ![Timeline](docs/timeline.jpg) | ![Years](docs/years.jpg) |
 
-Сами фото не скачиваются и никуда не отправляются: читаются только время и координаты съёмки.
-Страна определяется на устройстве по полигонам [Natural Earth](https://www.naturalearthdata.com/).
+The photos themselves are never downloaded or sent anywhere: only the capture time and coordinates are read.
+The country is resolved on the device using [Natural Earth](https://www.naturalearthdata.com/) polygons.
 
-## Сборка
+## Build
 
-Kotlin Multiplatform + Compose Multiplatform: Android и desktop (JVM). Нужны JDK 21 и Android SDK
-(`sdk.dir` в `local.properties`).
+Kotlin Multiplatform + Compose Multiplatform: Android and desktop (JVM). Requires JDK 21 and the Android SDK
+(`sdk.dir` in `local.properties`).
 
 ```sh
-./gradlew :shared:jvmTest              # тесты
+./gradlew :shared:jvmTest              # tests
 ./gradlew :androidApp:assembleDebug    # APK: androidApp/build/outputs/apk/debug/
-./gradlew :shared:run                  # desktop (только Яндекс Диск, вход вставкой токена)
+./gradlew :shared:run                  # desktop (Yandex Disk only, sign in by pasting a token)
 ```
 
-Релиз (`assembleRelease`) пока подписывается отладочным ключом.
+The release build (`assembleRelease`) is signed with the debug key for now.
 
-## Устройство
+## Layout
 
-- `shared/` — весь код: `core` (точки, страны, лента), `yandex` (API Диска, OAuth), `gallery` (MediaStore),
-  `data` (файловое хранилище), `ui` (экраны).
-- `androidApp/` — Activity, манифест, ресурсы.
-- `prototype/` — исходный прототип на Python и упаковщик полигонов `pack_countries.py`.
+- `shared/` — all the code: `core` (points, countries, timeline), `yandex` (Disk API, OAuth), `gallery` (MediaStore),
+  `data` (file storage), `ui` (screens).
+- `androidApp/` — the Activity, manifest and resources.
+- `prototype/` — the original Python prototype and the polygon packer `pack_countries.py`.
 
-Вход в Яндекс — OAuth implicit flow с возвратом на `photocountries://auth`. ID клиента лежит в
-`shared/.../yandex/OAuth.kt`; он публичный, секрета у клиента нет.
+Yandex sign-in uses the OAuth implicit flow with a redirect to `photocountries://auth`. The client ID lives in
+`shared/.../yandex/OAuth.kt`; it is public, the client has no secret.
