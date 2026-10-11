@@ -1,6 +1,7 @@
 package dev.photocountries
 
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -12,6 +13,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // С тремя кнопками система иначе кладёт под них свою подложку, и приложение обрывается о неё.
+        if (Build.VERSION.SDK_INT >= 29) window.isNavigationBarContrastEnforced = false
         // Только при первом создании: после поворота экрана в intent лежит тот же адрес возврата.
         if (savedInstanceState == null) handleAuthRedirect(intent)
         setContent {

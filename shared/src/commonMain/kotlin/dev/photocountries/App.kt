@@ -1,45 +1,57 @@
 package dev.photocountries
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationRail
-import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.photocountries.core.HiddenStay
 import dev.photocountries.core.Stay
@@ -53,6 +65,7 @@ import dev.photocountries.ui.TimelineScreen
 import dev.photocountries.ui.YearsScreen
 import dev.photocountries.ui.formatDate
 import dev.photocountries.ui.rememberCountryColors
+import kotlinx.coroutines.delay
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.compose.resources.StringResource
@@ -86,6 +99,7 @@ fun App(model: AppModel) {
                     onSortByRecent = model::setSortByRecent,
                     onHide = model::hide,
                     onUnhide = model::unhide,
+                    photos = model::photosOf,
                 )
             }
         }
@@ -100,13 +114,13 @@ private val DESTINATIONS = listOf(
     Destination(Res.string.tab_years, AppIcons.Calendar),
 )
 
-/** Шире этого (раскрытый телефон, планшет, окно на desktop) навигация уходит с нижней панели в боковую. */
-private val WIDE = 600.dp
-
 /** Список не растягивается на весь широкий экран. */
 private val CONTENT_MAX = 640.dp
 
-@OptIn(ExperimentalMaterial3Api::class)
+/** Высота плавающей навигации и её отступ от края экрана. */
+private val NAV_HEIGHT = 60.dp
+private val NAV_GAP = 12.dp
+
 @Composable
 private fun MainScreen(
     state: AppState,
@@ -116,85 +130,144 @@ private fun MainScreen(
     onSortByRecent: (Boolean) -> Unit,
     onHide: (Stay) -> Unit,
     onUnhide: (HiddenStay) -> Unit,
+    photos: (Stay) -> StayPhotos,
 ) {
     // Вкладка и сортировка стран лежат в модели: они сохраняются между запусками.
     val tab = state.ui.tab.coerceIn(0, DESTINATIONS.lastIndex)
     var askReload by rememberSaveable { mutableStateOf(false) }
     if (askReload) ReloadDialog(onConfirm = { askReload = false; onReloadAll() }, onDismiss = { askReload = false })
-    BoxWithConstraints(Modifier.fillMaxSize()) {
-        val wide = maxWidth >= WIDE
-        Scaffold(
-            topBar = {
-                Column {
-                    TopAppBar(
-                        title = { Text(stringResource(Res.string.app_title), maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                        actions = {
-                            IconButton(onClick = { askReload = true }, enabled = !state.loading) {
-                                Icon(AppIcons.Refresh, stringResource(Res.string.refresh))
-                            }
-                            IconButton(onClick = onSources) { Icon(AppIcons.Sources, stringResource(Res.string.sources)) }
-                        },
-                        windowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
-                    )
-                    StatusLine(
-                        state,
-                        Modifier
-                            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
-                            .padding(horizontal = 16.dp)
-                            .padding(bottom = 8.dp),
-                    )
-                    if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
-                }
-            },
-            bottomBar = {
-                if (!wide) {
-                    NavigationBar {
-                        DESTINATIONS.forEachIndexed { i, dest ->
-                            NavigationBarItem(
-                                selected = tab == i,
-                                onClick = { onTab(i) },
-                                icon = { Icon(dest.icon, null) },
-                                label = { Text(stringResource(dest.title)) },
-                            )
-                        }
-                    }
-                }
-            },
-            contentWindowInsets = WindowInsets.safeDrawing,
-        ) { padding ->
-            Row(Modifier.fillMaxSize().padding(padding)) {
-                if (wide) {
-                    // Отступы от системных панелей уже учтены в padding.
-                    NavigationRail(windowInsets = WindowInsets(0, 0, 0, 0)) {
-                        DESTINATIONS.forEachIndexed { i, dest ->
-                            NavigationRailItem(
-                                selected = tab == i,
-                                onClick = { onTab(i) },
-                                icon = { Icon(dest.icon, null) },
-                                label = { Text(stringResource(dest.title)) },
-                            )
-                        }
-                    }
-                }
-                val timeline = state.timeline
-                Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
-                    when {
-                        // Во время загрузки пустая лента — ещё не «ничего не нашлось».
-                        timeline == null || (state.loading && timeline.stays.isEmpty()) ->
-                            if (state.loading) CircularProgressIndicator()
-                        // Если скрыто всё, вкладки остаются: вернуть скрытое можно только с таймлайна.
-                        timeline.stays.isEmpty() && state.hidden.isEmpty() -> Text(
-                            stringResource(Res.string.empty),
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        else -> Tabs(
-                            tab, timeline, state.ui.sortByRecent, onSortByRecent, state.hidden, onHide, onUnhide,
-                            Modifier.fillMaxHeight().widthIn(max = CONTENT_MAX).fillMaxWidth(),
-                        )
-                    }
-                }
+    Scaffold(
+        topBar = { Header(state, onReload = { askReload = true }, onSources = onSources) },
+        containerColor = MaterialTheme.colorScheme.surface,
+        // Нижний отступ не здесь: списки уходят под плавающую навигацию и сами оставляют под неё место.
+        contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
+    ) { padding ->
+        val systemBottom = WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding()
+        val timeline = state.timeline
+        BoxWithConstraints(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+            // В горизонтальной ориентации высоты мало: навигация встаёт слева, содержимое отступает от неё вбок.
+            val side = maxWidth > maxHeight
+            val navSpace = NAV_HEIGHT + NAV_GAP * 2
+            val bottomPad = systemBottom + if (side) 16.dp else navSpace
+            when {
+                // Во время загрузки пустая лента — ещё не «ничего не нашлось».
+                timeline == null || (state.loading && timeline.stays.isEmpty()) ->
+                    if (state.loading) CircularProgressIndicator()
+                // Если скрыто всё, вкладки остаются: вернуть скрытое можно только с таймлайна.
+                timeline.stays.isEmpty() && state.hidden.isEmpty() -> Text(
+                    stringResource(Res.string.empty),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                else -> Tabs(
+                    tab, timeline, state.ui.sortByRecent, onSortByRecent, state.hidden, onHide, onUnhide, photos, bottomPad,
+                    // Полосам лет ширина только на пользу: день шире — страны различимее.
+                    Modifier
+                        .padding(start = if (side) navSpace else 0.dp)
+                        .fillMaxHeight()
+                        .widthIn(max = if (tab == 2) Dp.Unspecified else CONTENT_MAX)
+                        .fillMaxWidth(),
+                )
             }
+            if (side) {
+                FloatingNav(tab, onTab, vertical = true, Modifier.align(Alignment.CenterStart).padding(start = NAV_GAP))
+            } else {
+                // Список под навигацией растворяется в фоне, а не обрывается о неё.
+                val surface = MaterialTheme.colorScheme.surface
+                Box(
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .height(bottomPad)
+                        .background(Brush.verticalGradient(listOf(surface.copy(alpha = 0f), surface))),
+                )
+                FloatingNav(tab, onTab, vertical = false, Modifier.align(Alignment.BottomCenter).padding(bottom = systemBottom + NAV_GAP))
+            }
+        }
+    }
+}
+
+@Composable
+private fun Header(state: AppState, onReload: () -> Unit, onSources: () -> Unit) {
+    Column(Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))) {
+        Row(Modifier.padding(start = 20.dp, end = 8.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                stringResource(Res.string.app_title),
+                Modifier.weight(1f),
+                style = MaterialTheme.typography.headlineMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            IconButton(onClick = onReload, enabled = !state.loading) {
+                Icon(AppIcons.Refresh, stringResource(Res.string.refresh))
+            }
+            IconButton(onClick = onSources) { Icon(AppIcons.Sources, stringResource(Res.string.sources)) }
+        }
+        StatusLine(state, Modifier.padding(horizontal = 20.dp).padding(bottom = 8.dp))
+        if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+    }
+}
+
+/** Сколько имя вкладки висит рядом с боковой навигацией после переключения. */
+private const val NAV_HINT_MS = 1200L
+
+/**
+ * Навигация — капсула поверх содержимого: снизу или, если [vertical], слева. Снизу выбранная вкладка раскрыта
+ * в подпись постоянно. Сбоку подписям места нет: имя вкладки выезжает из капсулы поверх содержимого
+ * при открытии вкладки и вскоре прячется.
+ */
+@Composable
+private fun FloatingNav(tab: Int, onTab: (Int) -> Unit, vertical: Boolean, modifier: Modifier) {
+    val scheme = MaterialTheme.colorScheme
+    var hint by remember { mutableStateOf(false) }
+    LaunchedEffect(tab, vertical) {
+        hint = true
+        delay(NAV_HINT_MS)
+        hint = false
+    }
+    val items = @Composable {
+        DESTINATIONS.forEachIndexed { i, dest ->
+            NavItem(dest, selected = tab == i, labeled = tab == i && (!vertical || hint), vertical = vertical, onClick = { onTab(i) })
+        }
+    }
+    Box(modifier) {
+        // Подложка отдельно от вкладок: Surface обрезал бы выезжающую подпись по своей форме.
+        Surface(
+            Modifier.matchParentSize(),
+            shape = CircleShape,
+            color = scheme.primaryContainer,
+            shadowElevation = 8.dp,
+            border = BorderStroke(1.dp, scheme.onPrimaryContainer.copy(alpha = 0.08f)),
+        ) {}
+        if (vertical) {
+            Column(Modifier.padding(6.dp).width(NAV_HEIGHT - 12.dp).selectableGroup(), verticalArrangement = Arrangement.spacedBy(4.dp)) { items() }
+        } else {
+            Row(Modifier.padding(6.dp).selectableGroup(), horizontalArrangement = Arrangement.spacedBy(4.dp)) { items() }
+        }
+    }
+}
+
+@Composable
+private fun NavItem(dest: Destination, selected: Boolean, labeled: Boolean, vertical: Boolean, onClick: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    val title = stringResource(dest.title)
+    val pill by animateColorAsState(scheme.tertiaryContainer.copy(alpha = if (selected) 1f else 0f))
+    val content by animateColorAsState(if (selected) scheme.onTertiaryContainer else scheme.onPrimaryContainer)
+    Row(
+        Modifier
+            // Сбоку вкладка с подписью шире капсулы и выходит за её правый край.
+            .then(if (vertical) Modifier.wrapContentWidth(Alignment.Start, unbounded = true) else Modifier)
+            .height(NAV_HEIGHT - 12.dp)
+            .clip(CircleShape)
+            .background(pill)
+            .selectable(selected, role = Role.Tab, onClick = onClick)
+            .padding(horizontal = if (vertical) 12.dp else 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // Без подписи имя вкладке даёт значок.
+        Icon(dest.icon, if (labeled) null else title, tint = content)
+        AnimatedVisibility(labeled) {
+            Text(title, Modifier.padding(start = 8.dp, end = if (vertical) 4.dp else 0.dp), style = MaterialTheme.typography.labelLarge, color = content, maxLines = 1)
         }
     }
 }
@@ -208,13 +281,15 @@ private fun Tabs(
     hidden: List<HiddenStay>,
     onHide: (Stay) -> Unit,
     onUnhide: (HiddenStay) -> Unit,
+    photos: (Stay) -> StayPhotos,
+    bottomPad: Dp,
     modifier: Modifier,
 ) {
     val colors = rememberCountryColors(timeline)
     when (tab) {
-        0 -> CountriesScreen(timeline, colors, sortByRecent, onSortByRecent, modifier)
-        1 -> TimelineScreen(timeline, colors, hidden, onHide, onUnhide, modifier)
-        else -> YearsScreen(timeline, colors, modifier)
+        0 -> CountriesScreen(timeline, colors, sortByRecent, onSortByRecent, photos, bottomPad, modifier)
+        1 -> TimelineScreen(timeline, colors, hidden, onHide, onUnhide, photos, bottomPad, modifier)
+        else -> YearsScreen(timeline, colors, onHide, photos, bottomPad, modifier)
     }
 }
 

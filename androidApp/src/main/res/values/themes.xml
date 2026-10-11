@@ -1,4 +1,6 @@
 <resources>
-    <!-- Только фон окна до первого кадра Compose: без него светлая тема стартует с тёмной вспышкой. -->
-    <style name="Theme.PhotoCountries" parent="android:Theme.Material.Light.NoActionBar" />
+    <!-- Только фон окна до первого кадра Compose — тот же, что у темы Compose: без него старт со вспышкой. -->
+    <style name="Theme.PhotoCountries" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">#F7F2E8</item>
+    </style>
 </resources>

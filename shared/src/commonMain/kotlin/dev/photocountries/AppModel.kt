@@ -10,6 +10,7 @@ import dev.photocountries.core.Timeline
 import dev.photocountries.core.buildTimeline
 import dev.photocountries.core.hiddenIds
 import dev.photocountries.core.locatePoints
+import dev.photocountries.core.stayPhotos
 import dev.photocountries.core.withoutDuplicates
 import dev.photocountries.data.AppStorage
 import dev.photocountries.data.CachedPoints
@@ -32,6 +33,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.concurrent.Volatile
 import kotlin.time.Clock
 import kotlin.time.Instant
 
@@ -68,6 +70,9 @@ data class AppState(
     val connected: Boolean get() = hasToken || galleryOn
 }
 
+/** Фото одного пребывания, свежие первыми. [diskToken] — токен диска: без него его превью не отдаются. */
+class StayPhotos(val photos: List<PhotoPoint>, val diskToken: String?)
+
 /**
  * Держит данные дольше экрана: токен, кэш точек, ленту. Живёт в Application (на desktop — в `main`).
  * [gallery] — галерея телефона, null там, где её нет. [loadCountries] по умолчанию читает полигоны из ресурсов.
@@ -82,6 +87,8 @@ class AppModel(
     private val _state = MutableStateFlow(AppState(galleryAvailable = gallery != null))
     val state: StateFlow<AppState> = _state
 
+    // Токен, точки и скрытое читает ещё и экран ([photosOf]), из своего потока.
+    @Volatile
     private var token: String? = null
 
     // null — галерея не подключена; иначе id последнего просмотренного в ней фото.
@@ -97,7 +104,10 @@ class AppModel(
     private var queued = false
 
     // Точки последней полной ленты уже со странами: скрытие пересобирает ленту из них.
+    @Volatile
     private var located: List<LocatedPoint> = emptyList()
+
+    @Volatile
     private var hidden: List<HiddenStay> = emptyList()
 
     /** Читает токен и кэш; если источник есть — сразу обновляет. Повторные вызовы ничего не делают. */
@@ -203,6 +213,9 @@ class AppModel(
             if (located.isNotEmpty()) rebuild()
         }
     }
+
+    /** Фото пребывания — когда его открыли в ленте. Сами картинки грузит экран. */
+    fun photosOf(stay: Stay): StayPhotos = StayPhotos(stayPhotos(located, stay, hidden), token)
 
     /** Добавляет фото, появившиеся в источниках после прошлого обновления; без кэша читает всё. */
     fun refresh() { load(full = false) }
@@ -328,7 +341,8 @@ class AppModel(
         val index = countryIndex()
         val result = withContext(Dispatchers.Default) {
             val (fromDisk, fromGallery) = cached.points.partition { it.source == PhotoSource.YandexDisk }
-            locatePoints(fromDisk + withoutDuplicates(fromGallery, fromDisk), index)
+            // Из двух копий остаётся та, что в галерее: её показ не требует сети.
+            locatePoints(withoutDuplicates(fromDisk, fromGallery) + fromGallery, index)
         }
         located = result.points
         _state.update { it.copy(fetchedAt = cached.fetchedAt, pointCount = result.points.size, lostCount = result.lost) }

@@ -32,7 +32,7 @@
     <string name="gallery_connect">Подключить галерею</string>
     <string name="gallery_allow">Разрешить доступ</string>
     <string name="gallery_denied">Нет доступа. Разрешите приложению фото и данные о месте съёмки — в запросе системы или в настройках приложения.</string>
-    <string name="login_about">Приложение читает только время и координаты фото из списка файлов диска. Сами фото не скачиваются, координаты никуда не отправляются.</string>
+    <string name="login_about">Приложение читает время и координаты фото из списка файлов диска. Уменьшенные копии фото скачиваются, только когда вы открываете пребывание или страну; координаты никуда не отправляются.</string>
     <string name="login_browser">Войти через Яндекс</string>
     <string name="login_no_client">Вход через браузер пока не работает: OAuth-клиент ещё не зарегистрирован (пустой YANDEX_CLIENT_ID). Вставьте токен ниже.</string>
     <string name="login_token_label">OAuth-токен</string>
@@ -41,28 +41,34 @@
     <string name="sort_days">По дням</string>
     <string name="sort_recent">По последнему визиту</string>
     <string name="only_transit">только транзит</string>
+    <string name="fact_new">Новые в %1$d</string>
+    <string name="fact_record_year">Рекордный год</string>
+    <string name="fact_longest">Дольше всего</string>
+    <string name="none">нет</string>
 
     <string name="kind_transit">транзит</string>
     <string name="kind_short_visit">заезд</string>
-    <string name="hole">дыра %1$d дн.</string>
     <string name="days_exact">%1$d дн.</string>
-    <string name="days_range">%1$d–%2$d дн.</string>
-    <string name="stay_line">%1$s · %2$s · %3$d фото</string>
+    <string name="days_approx">примерно %1$d дн.</string>
+    <string name="stay_line">%1$s · %2$d фото</string>
     <string name="detail_dates">Фото: %1$s (UTC)</string>
     <string name="detail_days_exact">Дней: %1$d</string>
-    <string name="detail_days_range">Дней: от %1$d до %2$d (с днями без фото до соседних пребываний)</string>
+    <string name="detail_days_approx">Дней: примерно %1$d (с половиной дней без фото до соседних пребываний)</string>
     <string name="detail_photos">Фото: %1$d</string>
-    <string name="detail_hole">Внутри %1$d дн. подряд без фото</string>
     <string name="detail_transit">Транзит: в счёт визитов не идёт</string>
     <string name="detail_short_visit">Заезд: меньше суток, до и после одна и та же страна</string>
 
+    <string name="country_span">Фото: с %1$s по %2$s (UTC)</string>
+    <string name="photo_position">%1$s · %2$d из %3$d</string>
+
     <string name="hide">Скрыть</string>
+    <string name="hide_help">Что значит «Скрыть»</string>
     <string name="hide_hint">«Скрыть» — для чужих фото: пребывание пропадёт из ленты и из всех итогов.</string>
     <string name="hidden_count">Скрытые: %1$d</string>
     <string name="hidden_title">Скрытые пребывания</string>
     <string name="unhide">Вернуть</string>
 
     <string name="other_countries">остальные</string>
-    <string name="no_photos">нет фото</string>
+    <string name="no_stay">вне ленты</string>
     <string name="months">ЯФМАМИИАСОНД</string>
 </resources>

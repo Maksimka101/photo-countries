@@ -39,7 +39,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import dev.photocountries.StayPhotos
 import dev.photocountries.core.Stay
 import dev.photocountries.core.StayKind
 import dev.photocountries.core.Timeline
@@ -59,14 +61,28 @@ private val MONTH_DAYS = listOf(31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
 
 /**
  * Год — горизонтальная полоса из дней, закрашенных цветами стран, с флагами на отрезках; свежие годы сверху.
- * Тап по стране подписывает её пребывание — даты и длительность, тап по пустому дню — дату.
+ * Дни без фото между пребываниями поделены между соседями. Тап по стране подписывает её пребывание —
+ * даты фото и длительность, тап по пустому дню — дату. Нажатие на подпись пребывания открывает ту же
+ * шторку с фото ([photos]) и «Скрыть», что и в ленте.
  */
 @Composable
-fun YearsScreen(timeline: Timeline, colors: CountryColors, modifier: Modifier = Modifier) {
+fun YearsScreen(
+    timeline: Timeline,
+    colors: CountryColors,
+    onHide: (Stay) -> Unit,
+    photos: (Stay) -> StayPhotos,
+    bottomPad: Dp,
+    modifier: Modifier = Modifier,
+) {
     val strips = remember(timeline) { yearStrips(timeline.stays).reversed() }
     // Выбранный день: год и номер дня в нём.
     var selected by remember(timeline) { mutableStateOf<Pair<Int, Int>?>(null) }
-    LazyColumn(modifier, contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    var opened by remember(timeline) { mutableStateOf<Stay?>(null) }
+    LazyColumn(
+        modifier,
+        contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = bottomPad),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
         item { Legend(timeline, colors) }
         item { MonthLabels() }
         items(strips, key = { it.year }) { strip ->
@@ -76,8 +92,12 @@ fun YearsScreen(timeline: Timeline, colors: CountryColors, modifier: Modifier = 
                 colors = colors,
                 selectedDay = selected?.takeIf { it.first == strip.year }?.second,
                 onSelect = { day -> selected = (strip.year to day).takeIf { it != selected } },
+                onOpen = { opened = it },
             )
         }
+    }
+    opened?.let { stay ->
+        StaySheet(stay, remember(stay) { photos(stay) }, onHide = { opened = null; onHide(stay) }, onDismiss = { opened = null })
     }
 }
 
@@ -135,7 +155,14 @@ private fun dayRuns(days: List<String?>): List<DayRun> {
 }
 
 @Composable
-private fun YearRow(strip: YearStrip, stays: List<Stay>, colors: CountryColors, selectedDay: Int?, onSelect: (Int) -> Unit) {
+private fun YearRow(
+    strip: YearStrip,
+    stays: List<Stay>,
+    colors: CountryColors,
+    selectedDay: Int?,
+    onSelect: (Int) -> Unit,
+    onOpen: (Stay) -> Unit,
+) {
     val track = MaterialTheme.colorScheme.surfaceContainerHighest
     val marker = MaterialTheme.colorScheme.onSurface
     val surface = MaterialTheme.colorScheme.surface
@@ -150,7 +177,8 @@ private fun YearRow(strip: YearStrip, stays: List<Stay>, colors: CountryColors, 
             Text(
                 strip.year.toString(),
                 Modifier.width(YEAR_LABEL).height(BAR_HEIGHT).wrapContentHeight(),
-                style = MaterialTheme.typography.titleSmall,
+                style = MaterialTheme.typography.titleMedium,
+                fontFamily = DisplayFont,
             )
             BoxWithConstraints(Modifier.weight(1f)) {
                 val density = LocalDensity.current
@@ -223,16 +251,21 @@ private fun YearRow(strip: YearStrip, stays: List<Stay>, colors: CountryColors, 
             val text = if (stay != null) {
                 val name = "${flagEmoji(stay.country)} ${countryName(stay.country)}"
                 val kind = if (stay.kind == StayKind.Transit) stringResource(Res.string.kind_transit) + " · " else ""
-                "$kind$name · ${formatDateRange(stay.startDate, stay.endDate)} · ${daysRange(stay)}"
+                // Стрелка — знак, что подпись нажимается.
+                "$kind$name · ${formatDateRange(stay.startDate, stay.endDate)} · ${daysLabel(stay)} ›"
             } else {
-                "${formatDate(date)} — ${stringResource(Res.string.no_photos)}"
+                "${formatDate(date)} — ${stringResource(Res.string.no_stay)}"
             }
-            Surface(
-                Modifier.padding(start = YEAR_LABEL, top = 6.dp),
-                color = MaterialTheme.colorScheme.secondaryContainer,
-                shape = MaterialTheme.shapes.small,
-            ) {
+            val chip = Modifier.padding(start = YEAR_LABEL, top = 6.dp)
+            val color = MaterialTheme.colorScheme.secondaryContainer
+            val shape = MaterialTheme.shapes.small
+            val label = @Composable {
                 Text(text, Modifier.padding(horizontal = 10.dp, vertical = 4.dp), style = MaterialTheme.typography.labelLarge)
+            }
+            if (stay != null) {
+                Surface(onClick = { onOpen(stay) }, modifier = chip, color = color, shape = shape, content = label)
+            } else {
+                Surface(chip, color = color, shape = shape, content = label)
             }
         }
     }

@@ -38,7 +38,7 @@ class YandexDiskPagingTest {
         // offset идёт шагом limit, а не по числу пришедших файлов.
         assertEquals(listOf("0", "500", "1000"), urls.map { it.substringAfter("offset=").substringBefore('&') })
         assertTrue(urls.all { it.startsWith("https://cloud-api.yandex.net/v1/disk/resources/files?media_type=image&limit=500&") })
-        assertTrue(urls.all { "fields=items.path,items.resource_id,items.exif." in it })
+        assertTrue(urls.all { "fields=items.path,items.resource_id,items.preview,items.exif." in it })
     }
 
     @Test
@@ -56,7 +56,7 @@ class YandexDiskPagingTest {
         assertEquals(listOf("new2.jpg", "new1.jpg"), fresh?.map { it.id })
         assertEquals(listOf("100", "1000"), urls.map { it.substringAfter("limit=").substringBefore('&') })
         assertTrue(urls.all { it.startsWith("https://cloud-api.yandex.net/v1/disk/resources/last-uploaded?media_type=image&") })
-        assertTrue(urls.all { "fields=path,resource_id,exif." in it })
+        assertTrue(urls.all { "fields=path,resource_id,preview,exif." in it })
     }
 
     @Test

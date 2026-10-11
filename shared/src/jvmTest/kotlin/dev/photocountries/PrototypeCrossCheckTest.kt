@@ -52,7 +52,7 @@ class PrototypeCrossCheckTest {
                 val note = when {
                     s.kind == StayKind.Transit -> " · транзит?"
                     s.kind == StayKind.ShortVisit -> " · заезд?"
-                    s.hasHole -> " · дыра ${s.holeDays} дн."
+                    s.holeDays > 30 -> " · дыра ${s.holeDays} дн."
                     else -> ""
                 }
                 val d = s.startDate
@@ -64,7 +64,7 @@ class PrototypeCrossCheckTest {
                 append("  %02d-%02d %s: %s дн., %d фото%s\n".format(d.month.ordinal + 1, d.day, names[s.country], span, s.photos, note))
             }
             append("\nстраны (визитов / дней минимум):\n")
-            for (t in timeline.totals) append("  ${names[t.country]}: ${t.visits} / ${t.minDays}\n")
+            for (t in timeline.totals.sortedByDescending { it.minDays }) append("  ${names[t.country]}: ${t.visits} / ${t.minDays}\n")
         }
         assertEquals(expected, actual)
         println("сверка с прототипом: совпало, пребываний ${timeline.stays.size}")

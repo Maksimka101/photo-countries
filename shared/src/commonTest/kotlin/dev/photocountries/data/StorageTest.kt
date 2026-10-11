@@ -13,7 +13,7 @@ class StorageTest {
     private val cached = CachedPoints(
         Instant.parse("2026-10-11T08:00:00Z"),
         listOf(
-            PhotoPoint(Instant.parse("2024-05-01T10:20:30Z"), 44.5, 20.25, PhotoSource.YandexDisk, "42:abc"),
+            PhotoPoint(Instant.parse("2024-05-01T10:20:30Z"), 44.5, 20.25, PhotoSource.YandexDisk, "42:abc", "https://d.example/preview/k?size=S&crop=0"),
             PhotoPoint(Instant.parse("2019-01-01T00:00:00Z"), -33.25, -70.5, PhotoSource.Gallery, "content://media/1 2"),
         ),
     )
@@ -37,7 +37,19 @@ class StorageTest {
         assertNull(decodePoints(listOf("что-то другое", "1")))
         val lines = encodePoints(cached).lines()
         assertNull(decodePoints(lines.take(2) + "1\t2\t3"))
-        assertNull(decodePoints(lines.take(2) + "x\t1.0\t2.0\tYandexDisk\tid"))
+        assertNull(decodePoints(lines.take(2) + "x\t1.0\t2.0\tYandexDisk\tid\t"))
+    }
+
+    @Test
+    fun oldCacheKeepsOnlyGalleryPoints() {
+        val old = listOf(
+            "photo-countries points v1",
+            "1760169600",
+            "1714558830\t44.5\t20.25\tYandexDisk\t42:abc",
+            "1546300800\t-33.25\t-70.5\tGallery\tmedia:7",
+        )
+        val decoded = assertNotNull(decodePoints(old))
+        assertEquals(listOf(PhotoPoint(Instant.parse("2019-01-01T00:00:00Z"), -33.25, -70.5, PhotoSource.Gallery, "media:7")), decoded.points)
     }
 
     @Test

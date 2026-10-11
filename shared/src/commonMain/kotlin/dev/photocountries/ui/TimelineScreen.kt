@@ -1,10 +1,12 @@
 package dev.photocountries.ui
 
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -12,10 +14,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -27,14 +26,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import dev.photocountries.StayPhotos
 import dev.photocountries.core.HiddenStay
 import dev.photocountries.core.Stay
 import dev.photocountries.core.StayKind
@@ -46,7 +43,8 @@ import kotlin.math.sqrt
 
 /**
  * Вертикальная лента по годам, свежее сверху. Пребывание, перешедшее через Новый год, стоит в году начала.
- * Пребывание можно скрыть из его карточки; скрытые ([hidden]) возвращаются из списка над лентой.
+ * По нажатию открывается шторка пребывания с его фото ([photos]); оттуда же его можно скрыть.
+ * Скрытые ([hidden]) возвращаются из списка над лентой.
  */
 @Composable
 fun TimelineScreen(
@@ -55,6 +53,8 @@ fun TimelineScreen(
     hidden: List<HiddenStay>,
     onHide: (Stay) -> Unit,
     onUnhide: (HiddenStay) -> Unit,
+    photos: (Stay) -> StayPhotos,
+    bottomPad: Dp,
     modifier: Modifier = Modifier,
 ) {
     val byYear = remember(timeline) {
@@ -62,7 +62,7 @@ fun TimelineScreen(
     }
     var selected by remember(timeline) { mutableStateOf<Stay?>(null) }
     var showHidden by remember { mutableStateOf(false) }
-    LazyColumn(modifier, contentPadding = PaddingValues(bottom = 24.dp)) {
+    LazyColumn(modifier, contentPadding = PaddingValues(bottom = bottomPad)) {
         if (hidden.isNotEmpty()) {
             item(key = "hidden") {
                 AssistChip(
@@ -74,12 +74,14 @@ fun TimelineScreen(
         }
         byYear.forEach { (year, stays) ->
             item(key = "y$year") {
-                Text(
-                    year.toString(),
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(start = 28.dp, top = 20.dp, bottom = 8.dp),
-                )
+                // Год — крупной цифрой, от неё линия до края: лента читается как разделы.
+                Row(
+                    Modifier.padding(start = 20.dp, end = 16.dp, top = 24.dp, bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(year.toString(), style = MaterialTheme.typography.displaySmall, color = MaterialTheme.colorScheme.primary)
+                    Box(Modifier.padding(start = 16.dp).weight(1f).height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
+                }
             }
             items(stays.size, key = { stays[it].index }) { i ->
                 val stay = stays[i].value
@@ -87,7 +89,7 @@ fun TimelineScreen(
             }
         }
     }
-    selected?.let { stay -> StayDialog(stay, onHide = { selected = null; onHide(stay) }, onDismiss = { selected = null }) }
+    selected?.let { stay -> StaySheet(stay, remember(stay) { photos(stay) }, onHide = { selected = null; onHide(stay) }, onDismiss = { selected = null }) }
     if (showHidden && hidden.isNotEmpty()) HiddenDialog(hidden, onUnhide, onDismiss = { showHidden = false })
 }
 
@@ -97,110 +99,46 @@ private fun barHeight(days: Int): Dp = (20 + 8 * sqrt(days.toDouble())).coerceAt
 
 @Composable
 private fun StayRow(stay: Stay, color: Color, onClick: () -> Unit) {
-    val transit = stay.kind == StayKind.Transit
-    val title = "${flagEmoji(stay.country)} ${countryName(stay.country)}"
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val dates = formatDateRange(stay.startDate, stay.endDate)
-    // Пребывание — карточка; транзит остаётся строкой без подложки.
-    Surface(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp),
-        color = if (transit) Color.Transparent else MaterialTheme.colorScheme.surfaceContainer,
-        shape = MaterialTheme.shapes.large,
-    ) {
-        Column(
-            Modifier
-                .padding(horizontal = 12.dp, vertical = if (transit) 2.dp else 10.dp)
-                .heightIn(min = if (transit) 24.dp else barHeight(stay.minDays))
-                .drawBehind { drawStayBar(color, thin = transit, hole = stay.hasHole) }
-                .padding(start = 20.dp, top = 4.dp, bottom = 4.dp),
-            verticalArrangement = Arrangement.Center,
-        ) {
-            val muted = MaterialTheme.colorScheme.onSurfaceVariant
-            if (transit) {
-                // Транзит — тонкая строка: в счёт визитов не идёт.
-                Text("${stringResource(Res.string.kind_transit)} · $title · $dates", style = MaterialTheme.typography.bodySmall, color = muted)
-            } else {
-                Text(title, style = MaterialTheme.typography.titleMedium)
-                Text(
-                    stringResource(Res.string.stay_line, dates, daysRange(stay), stay.photos),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = muted,
-                )
-                if (stay.kind == StayKind.ShortVisit) {
-                    Text(stringResource(Res.string.kind_short_visit), style = MaterialTheme.typography.bodySmall, color = muted)
-                }
-                if (stay.hasHole) {
-                    Text("┆ " + stringResource(Res.string.hole, stay.holeDays), style = MaterialTheme.typography.bodySmall, color = muted)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-internal fun daysRange(stay: Stay): String =
-    if (stay.minDays == stay.maxDays) stringResource(Res.string.days_exact, stay.minDays)
-    else stringResource(Res.string.days_range, stay.minDays, stay.maxDays)
-
-/** Цветная полоса слева во всю высоту строки; у пребывания с дырой середина — пунктир. */
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawStayBar(color: Color, thin: Boolean, hole: Boolean) {
-    val w = (if (thin) 2.dp else 8.dp).toPx()
-    val x = (8.dp.toPx() - w) / 2
-    val radius = CornerRadius(w / 2)
-    if (!hole) {
-        drawRoundRect(color, Offset(x, 0f), Size(w, size.height), radius)
-        return
-    }
-    val part = size.height * 0.3f
-    drawRoundRect(color, Offset(x, 0f), Size(w, part), radius)
-    drawRoundRect(color, Offset(x, size.height - part), Size(w, part), radius)
-    val gap = 4.dp.toPx()
-    drawLine(
-        color,
-        Offset(x + w / 2, part + gap),
-        Offset(x + w / 2, size.height - part - gap),
-        strokeWidth = 2.dp.toPx(),
-        cap = StrokeCap.Round,
-        pathEffect = PathEffect.dashPathEffect(floatArrayOf(gap, gap)),
-    )
-}
-
-/** Сведения и «Скрыть»; фото и «транзит / не транзит» — следующая очередь. */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun StayDialog(stay: Stay, onHide: () -> Unit, onDismiss: () -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(
-            Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
+    val modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp)
+    if (stay.kind == StayKind.Transit) {
+        // Транзит — тонкая строка без подложки: в счёт визитов не идёт.
+        Surface(onClick, modifier, color = Color.Transparent, shape = MaterialTheme.shapes.large) {
             Text(
-                "${flagEmoji(stay.country)} ${countryName(stay.country)}",
-                style = MaterialTheme.typography.headlineSmall,
-                modifier = Modifier.padding(bottom = 8.dp),
-            )
-            Text(stringResource(Res.string.detail_dates, formatDateRange(stay.startDate, stay.endDate)))
-            Text(
-                if (stay.minDays == stay.maxDays) stringResource(Res.string.detail_days_exact, stay.minDays)
-                else stringResource(Res.string.detail_days_range, stay.minDays, stay.maxDays),
-            )
-            Text(stringResource(Res.string.detail_photos, stay.photos))
-            if (stay.hasHole) Text(stringResource(Res.string.detail_hole, stay.holeDays))
-            when (stay.kind) {
-                StayKind.Transit -> Text(stringResource(Res.string.detail_transit))
-                StayKind.ShortVisit -> Text(stringResource(Res.string.detail_short_visit))
-                StayKind.Regular -> Unit
-            }
-            Text(
-                stringResource(Res.string.hide_hint),
+                "${stringResource(Res.string.kind_transit)} · ${flagEmoji(stay.country)} ${countryName(stay.country)} · $dates",
+                Modifier
+                    .padding(horizontal = 12.dp, vertical = 2.dp)
+                    .heightIn(min = 24.dp)
+                    .drawBehind { drawRect(color, Offset(2.dp.toPx(), 0f), Size(2.dp.toPx(), size.height)) }
+                    .padding(start = 18.dp, top = 4.dp, bottom = 4.dp),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 8.dp),
+                color = muted,
             )
-            OutlinedButton(onClick = onHide, modifier = Modifier.align(Alignment.End)) { Text(stringResource(Res.string.hide)) }
+        }
+    } else {
+        // Та же карточка, что в списке стран, только высота растёт с длительностью.
+        PlaceCard(
+            country = stay.country,
+            color = color,
+            subtitle = stringResource(Res.string.stay_line, dates, stay.photos),
+            days = stay.days,
+            approximate = stay.approximate,
+            modifier = modifier,
+            minHeight = barHeight(stay.days),
+            onClick = onClick,
+        ) {
+            if (stay.kind == StayKind.ShortVisit) {
+                Text(stringResource(Res.string.kind_short_visit), style = MaterialTheme.typography.bodySmall, color = muted)
+            }
         }
     }
 }
+
+/** «12 дн.» или, если в счёт вошли дни без фото, «примерно 12 дн.». */
+@Composable
+internal fun daysLabel(stay: Stay): String =
+    stringResource(if (stay.approximate) Res.string.days_approx else Res.string.days_exact, stay.days)
 
 /** Скрытые пребывания, свежее сверху; «Вернуть» возвращает фото в ленту. */
 @Composable

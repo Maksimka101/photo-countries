@@ -3,12 +3,10 @@ package dev.photocountries.core
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.daysUntil
+import kotlinx.datetime.minus
 import kotlinx.datetime.plus
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Instant
-
-/** Дыра без фото внутри пребывания, о которой стоит предупредить, — больше стольких дней. */
-const val HOLE_DAYS = 30
 
 /** Пребывание короче этого может быть транзитом или заездом. */
 private val SHORT_STAY = 24.hours
@@ -20,9 +18,10 @@ private val SHORT_STAY = 24.hours
 enum class StayKind { Regular, Transit, ShortVisit }
 
 /**
- * Пребывание: подряд идущие фото одной страны. Длительность — диапазон: [minDays] от первого фото
- * до последнего, [maxDays] добавляет дни без фото до соседних пребываний. [holeDays] — самый длинный
- * разрыв между соседними фото внутри.
+ * Пребывание: подряд идущие фото одной страны. [minDays] — от первого фото до последнего, [maxDays]
+ * добавляет все дни без фото до соседних пребываний. [holeDays] — самый длинный разрыв между соседними
+ * фото внутри. [fromDate]..[toDate] — дни, отданные пребыванию: к дням с фото добавлена его доля дней
+ * без фото до соседей (см. [spreadGaps]); по ним считаются [days], итоги стран и полосы лет.
  */
 data class Stay(
     val country: String,
@@ -33,21 +32,32 @@ data class Stay(
     val maxDays: Int,
     val holeDays: Int,
     val kind: StayKind,
+    val fromDate: LocalDate = start.utcDate(),
+    val toDate: LocalDate = end.utcDate(),
 ) {
     val startDate: LocalDate get() = start.utcDate()
     val endDate: LocalDate get() = end.utcDate()
-    val hasHole: Boolean get() = holeDays > HOLE_DAYS
+    val days: Int get() = fromDate.daysUntil(toDate) + 1
+
+    /** В [days] вошли дни без фото — число показывается как примерное. */
+    val approximate: Boolean get() = days != minDays
 }
 
-/** Итог по стране: [visits] — без транзитов, [minDays] — сумма минимальных длительностей всех пребываний. */
+/**
+ * Итог по стране: [visits] — без транзитов, [days] — сумма [Stay.days] всех пребываний, [minDays] — сумма
+ * минимальных длительностей; [approximate] — в [days] вошли дни без фото.
+ */
 data class CountryTotal(
     val country: String,
     val visits: Int,
+    val days: Int,
     val minDays: Int,
     val lastVisit: LocalDate,
-)
+) {
+    val approximate: Boolean get() = days != minDays
+}
 
-/** Лента пребываний по времени и итоги по странам (по убыванию дней). */
+/** Лента пребываний по времени и итоги по странам (по убыванию [CountryTotal.days]). */
 data class Timeline(val stays: List<Stay>, val totals: List<CountryTotal>) {
     companion object {
         val EMPTY = Timeline(emptyList(), emptyList())
@@ -82,7 +92,7 @@ fun buildTimeline(points: List<LocatedPoint>, ignoredIds: Set<String> = emptySet
         }
     }
 
-    val stays = runs.mapIndexed { i, r ->
+    val stays = spreadGaps(runs.mapIndexed { i, r ->
         val prev = runs.getOrNull(i - 1)
         val next = runs.getOrNull(i + 1)
         val startDate = r.start.utcDate()
@@ -105,18 +115,41 @@ fun buildTimeline(points: List<LocatedPoint>, ignoredIds: Set<String> = emptySet
             else -> StayKind.Regular
         }
         Stay(r.country, r.start, r.end, r.photos, lo, hi, r.hole, kind)
-    }
+    })
 
     val totals = stays.groupBy { it.country }.map { (country, list) ->
         CountryTotal(
             country = country,
             visits = list.count { it.kind != StayKind.Transit },
+            days = list.sumOf { it.days },
             minDays = list.sumOf { it.minDays },
             lastVisit = list.last().endDate,
         )
-    }.sortedByDescending { it.minDays }
+    }.sortedByDescending { it.days }
 
     return Timeline(stays, totals)
+}
+
+/**
+ * Раздаёт дни без фото между соседними пребываниями: пополам, нечётный день — более раннему.
+ * Транзит таких дней не берёт, они целиком уходят соседу — если тот сам не транзит.
+ */
+private fun spreadGaps(stays: List<Stay>): List<Stay> = stays.mapIndexed { i, s ->
+    val before = stays.getOrNull(i - 1)?.let { gapShares(it, s).second } ?: 0
+    val after = stays.getOrNull(i + 1)?.let { gapShares(s, it).first } ?: 0
+    s.copy(fromDate = s.startDate.minus(DatePeriod(days = before)), toDate = s.endDate.plus(DatePeriod(days = after)))
+}
+
+/** Сколько дней без фото между [a] и следующим за ним [b] достаётся каждому из них. */
+private fun gapShares(a: Stay, b: Stay): Pair<Int, Int> {
+    val free = (a.endDate.daysUntil(b.startDate) - 1).coerceAtLeast(0)
+    val aTransit = a.kind == StayKind.Transit
+    val first = when {
+        aTransit == (b.kind == StayKind.Transit) -> (free + 1) / 2
+        aTransit -> 0
+        else -> free
+    }
+    return first to free - first
 }
 
 /**
@@ -138,28 +171,73 @@ fun hiddenIds(points: List<LocatedPoint>, hidden: List<HiddenStay>): Set<String>
 }
 
 /**
+ * Фото пребывания [stay] для показа, свежие первыми — как пребывания в ленте. Попавшие под [hidden] не входят: после скрытия
+ * соседние пребывания той же страны сливаются, и скрытые фото оказались бы внутри.
+ */
+fun stayPhotos(points: List<LocatedPoint>, stay: Stay, hidden: List<HiddenStay> = emptyList()): List<PhotoPoint> =
+    points
+        .filter { p -> p.country == stay.country && p.point.time in stay.start..stay.end && hidden.none { it.covers(p) } }
+        .map { it.point }
+        .sortedByDescending { it.time }
+
+/**
  * Пребывание, которым в [yearStrips] закрашен день [date]: обычное важнее транзита, из нескольких —
- * более позднее. null — день пустой.
+ * более позднее. null — день раньше первого пребывания или позже последнего.
  */
 fun stayOn(stays: List<Stay>, date: LocalDate): Stay? {
-    val covering = stays.filter { date >= it.startDate && date <= it.endDate }
+    val covering = stays.filter { date >= it.fromDate && date <= it.toDate }
     return covering.lastOrNull { it.kind != StayKind.Transit } ?: covering.lastOrNull()
 }
 
-/** Год как полоса дней: [days] — код страны на каждый день года или null, если фото в этот день не покрыты. */
+/**
+ * Факты для экрана стран, все без транзитов. [newCountries] — страны, первый визит в которые пришёлся
+ * на [lastYear], последний год ленты. [recordYear] — год с наибольшим числом стран ([recordCountries]),
+ * из равных — более поздний. [longest] — самое долгое пребывание по [Stay.days].
+ */
+data class TimelineFacts(
+    val lastYear: Int,
+    val newCountries: List<String>,
+    val recordYear: Int,
+    val recordCountries: Int,
+    val longest: Stay,
+)
+
+/** null — пребываний нет. */
+fun timelineFacts(stays: List<Stay>): TimelineFacts? {
+    val visits = stays.filter { it.kind != StayKind.Transit }
+    if (visits.isEmpty()) return null
+    val lastYear = visits.maxOf { it.endDate.year }
+    val firstYear = LinkedHashMap<String, Int>()
+    val byYear = HashMap<Int, MutableSet<String>>()
+    for (s in visits) {
+        firstYear.getOrPut(s.country) { s.startDate.year }
+        for (year in s.startDate.year..s.endDate.year) byYear.getOrPut(year) { HashSet() } += s.country
+    }
+    val record = byYear.entries.maxWith(compareBy({ it.value.size }, { it.key }))
+    return TimelineFacts(
+        lastYear = lastYear,
+        newCountries = firstYear.filterValues { it == lastYear }.keys.toList(),
+        recordYear = record.key,
+        recordCountries = record.value.size,
+        longest = visits.maxBy { it.days },
+    )
+}
+
+/** Год как полоса дней: [days] — код страны на каждый день года или null до первого пребывания и после последнего. */
 class YearStrip(val year: Int, val days: List<String?>)
 
 /**
- * Раскладывает пребывания по дням года (минимальные границы — от первого фото до последнего).
- * Транзит занимает день, только если тот больше ничем не занят; годы идут по возрастанию без пропусков.
+ * Раскладывает пребывания по дням года — от [Stay.fromDate] до [Stay.toDate], так что между пребываниями
+ * пустых дней нет. Транзит занимает день, только если тот больше ничем не занят; годы идут по возрастанию
+ * без пропусков.
  */
 fun yearStrips(stays: List<Stay>): List<YearStrip> {
     if (stays.isEmpty()) return emptyList()
     val byDay = HashMap<LocalDate, String>()
     val ordered = stays.filter { it.kind == StayKind.Transit } + stays.filter { it.kind != StayKind.Transit }
     for (s in ordered) {
-        var d = s.startDate
-        val end = s.endDate
+        var d = s.fromDate
+        val end = s.toDate
         while (d <= end) {
             byDay[d] = s.country
             d = d.plus(DatePeriod(days = 1))

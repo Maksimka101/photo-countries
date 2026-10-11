@@ -13,10 +13,11 @@ fun plural(n: Int, one: String, few: String, many: String): String {
     }
 }
 
-fun daysText(n: Int) = "$n ${plural(n, "день", "дня", "дней")}"
-fun visitsText(n: Int) = "$n ${plural(n, "визит", "визита", "визитов")}"
+fun daysWord(n: Int) = plural(n, "день", "дня", "дней")
+fun daysText(n: Int) = "$n ${daysWord(n)}"
+fun visitsWord(n: Int) = plural(n, "визит", "визита", "визитов")
+fun visitsText(n: Int) = "$n ${visitsWord(n)}"
 fun countriesWord(n: Int) = plural(n, "страна", "страны", "стран")
-fun yearsWord(n: Int) = plural(n, "год", "года", "лет")
 
 private fun two(n: Int) = n.toString().padStart(2, '0')
 

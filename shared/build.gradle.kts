@@ -38,13 +38,18 @@ kotlin {
             implementation(libs.cmp.material3)
             implementation(libs.cmp.resources)
             implementation(libs.ktor.client.core)
+            // Показ фото: загрузка, кэш и декодирование; сеть — через тот же Ktor.
+            implementation(libs.coil.compose)
+            implementation(libs.coil.network.ktor)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
         }
         // Движок Ktor у каждой платформы свой, поверх её же HTTP-стека; HttpClient() находит его сам.
         androidMain.dependencies {
-            implementation(libs.ktor.client.android)
+            // OkHttp, а не движок на HttpURLConnection: тот роняет приложение при отмене загрузки на середине
+            // (фото прокрутили раньше, чем оно скачалось).
+            implementation(libs.ktor.client.okhttp)
             // Запрос разрешения на галерею из Compose; библиотека и так есть в приложении.
             implementation(libs.activity.compose)
         }

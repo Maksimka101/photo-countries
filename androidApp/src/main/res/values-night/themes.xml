@@ -1,3 +1,5 @@
 <resources>
-    <style name="Theme.PhotoCountries" parent="android:Theme.Material.NoActionBar" />
+    <style name="Theme.PhotoCountries" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#13161B</item>
+    </style>
 </resources>

@@ -102,17 +102,47 @@ class TimelineTest {
     }
 
     @Test
-    fun holeIsLongestPhotolessGapAndFlaggedOverThirtyDays() {
+    fun holeIsLongestPhotolessGapAndStaysInsideStay() {
         val long = buildTimeline(
             listOf(p("2023-01-01T10:00:00", "RS"), p("2023-01-05T10:00:00", "RS"), p("2023-03-01T10:00:00", "RS")),
         ).stays.single()
         assertEquals(55, long.holeDays)
-        assertTrue(long.hasHole)
         assertEquals(60, long.minDays)
+        assertEquals(60, long.days)
+        assertFalse(long.approximate)
+    }
 
-        val exact = buildTimeline(listOf(p("2023-01-01T10:00:00", "RS"), p("2023-01-31T10:00:00", "RS"))).stays.single()
-        assertEquals(30, exact.holeDays)
-        assertFalse(exact.hasHole)
+    @Test
+    fun photolessDaysBetweenStaysAreSplitInHalf() {
+        val t = buildTimeline(
+            listOf(
+                p("2023-01-01T10:00:00", "RS"), p("2023-01-10T10:00:00", "RS"),
+                p("2023-01-16T10:00:00", "HU"), p("2023-01-20T10:00:00", "HU"),
+                p("2023-01-21T10:00:00", "AT"),
+            ),
+        )
+        // Между Сербией и Венгрией пять дней (11–15): три — Сербии, два — Венгрии.
+        assertEquals(listOf("2023-01-01", "2023-01-14", "2023-01-21"), t.stays.map { it.fromDate.toString() })
+        assertEquals(listOf("2023-01-13", "2023-01-20", "2023-01-21"), t.stays.map { it.toDate.toString() })
+        assertEquals(listOf(13, 7, 1), t.stays.map { it.days })
+        assertEquals(listOf(true, true, false), t.stays.map { it.approximate })
+        // Даты фото при этом прежние.
+        assertEquals("2023-01-10" to "2023-01-16", t.stays[0].endDate.toString() to t.stays[1].startDate.toString())
+    }
+
+    @Test
+    fun transitTakesNoPhotolessDays() {
+        val t = buildTimeline(
+            listOf(
+                p("2023-01-10T12:00:00", "RS"),
+                p("2023-01-11T08:00:00", "HU"),
+                p("2023-01-15T20:00:00", "AT"),
+            ),
+        )
+        assertEquals(StayKind.Transit, t.stays[1].kind)
+        assertEquals(1, t.stays[1].days)
+        // Дни 12–14 января целиком уходят Австрии.
+        assertEquals("2023-01-12" to 4, t.stays[2].fromDate.toString() to t.stays[2].days)
     }
 
     @Test
@@ -142,7 +172,43 @@ class TimelineTest {
         val serbia = t.totals[1]
         assertEquals(2, serbia.visits)
         assertEquals(5, serbia.minDays)
+        // 28 дней января без фото и 18 февраля делятся с Венгрией пополам.
+        assertEquals(28 to 33, serbia.days to t.totals[0].days)
+        assertTrue(serbia.approximate)
         assertEquals("2023-03-02", serbia.lastVisit.toString())
+    }
+
+    @Test
+    fun factsCountNewCountriesRecordYearAndLongestStayWithoutTransits() {
+        val t = buildTimeline(
+            listOf(
+                p("2023-01-01T10:00:00", "RS"), p("2023-01-20T10:00:00", "RS"),
+                p("2023-03-01T10:00:00", "HU"), p("2023-03-05T10:00:00", "HU"),
+                p("2023-06-01T10:00:00", "AT"),
+                p("2024-02-01T10:00:00", "RS"), p("2024-02-03T10:00:00", "RS"),
+                // Транзит через Италию: ни новой страной, ни страной года не считается.
+                p("2024-02-04T08:00:00", "IT"),
+                p("2024-02-04T20:00:00", "GE"), p("2024-02-10T10:00:00", "GE"),
+            ),
+        )
+        assertEquals(StayKind.Transit, t.stays.single { it.country == "IT" }.kind)
+        val facts = timelineFacts(t.stays)!!
+        assertEquals(2024, facts.lastYear)
+        assertEquals(listOf("GE"), facts.newCountries)
+        assertEquals(2023 to 3, facts.recordYear to facts.recordCountries)
+        // Единственное фото из Австрии, но с половиной дней без фото до Венгрии (43) и до Сербии (122).
+        assertEquals("AT" to 166, facts.longest.country to facts.longest.days)
+        assertEquals(null, timelineFacts(emptyList()))
+    }
+
+    @Test
+    fun factsPreferLaterYearAmongEqualRecords() {
+        val t = buildTimeline(
+            listOf(p("2023-01-01T10:00:00", "RS"), p("2023-03-01T10:00:00", "HU"), p("2024-01-05T10:00:00", "RS"), p("2024-03-01T10:00:00", "HU")),
+        )
+        val facts = timelineFacts(t.stays)!!
+        assertEquals(2024 to 2, facts.recordYear to facts.recordCountries)
+        assertEquals(emptyList(), facts.newCountries)
     }
 
     @Test
@@ -153,7 +219,7 @@ class TimelineTest {
     }
 
     @Test
-    fun yearStripsPaintDaysOfStaysAndLeaveGapsEmpty() {
+    fun yearStripsPaintDaysOfStaysAndSplitGapsBetweenThem() {
         val t = buildTimeline(
             listOf(
                 p("2023-12-30T10:00:00", "RS"), p("2024-01-02T10:00:00", "RS"),
@@ -164,10 +230,10 @@ class TimelineTest {
         assertEquals(listOf(2023, 2024), strips.map { it.year })
         assertEquals(listOf(365, 366), strips.map { it.days.size })
         assertEquals(listOf(null, "RS", "RS"), strips[0].days.takeLast(3))
-        assertEquals(listOf("RS", "RS", null), strips[1].days.take(3))
-        // 1 марта високосного года — 61-й день.
-        assertEquals("HU", strips[1].days[60])
-        assertEquals(3, strips[1].days.count { it != null })
+        // 58 дней без фото (3 января – 29 февраля) делятся пополам: январь — Сербии, февраль — Венгрии.
+        assertEquals(List(31) { "RS" } + List(30) { "HU" }, strips[1].days.take(61))
+        // После последнего пребывания дни пустые.
+        assertEquals(61, strips[1].days.count { it != null })
         assertEquals(emptyList(), yearStrips(emptyList()))
     }
 
@@ -198,7 +264,9 @@ class TimelineTest {
         )
         assertEquals(t.stays[0], stayOn(t.stays, kotlinx.datetime.LocalDate(2024, 1, 1)))
         assertEquals(t.stays[1], stayOn(t.stays, kotlinx.datetime.LocalDate(2024, 3, 1)))
-        assertEquals(null, stayOn(t.stays, kotlinx.datetime.LocalDate(2024, 2, 1)))
+        assertEquals(t.stays[0], stayOn(t.stays, kotlinx.datetime.LocalDate(2024, 1, 31)))
+        assertEquals(t.stays[1], stayOn(t.stays, kotlinx.datetime.LocalDate(2024, 2, 1)))
+        assertEquals(null, stayOn(t.stays, kotlinx.datetime.LocalDate(2024, 3, 2)))
     }
 
     @Test
@@ -211,5 +279,20 @@ class TimelineTest {
         val otherPlace = photo("2023-01-01T10:00:00", 45.5, PhotoSource.Gallery)
         assertEquals(listOf(otherTime, otherPlace), withoutDuplicates(listOf(same, otherTime, otherPlace), disk))
         assertEquals(listOf(same), withoutDuplicates(listOf(same), emptyList()))
+    }
+
+    @Test
+    fun stayPhotosAreItsOwnNewestFirstWithoutHidden() {
+        val points = listOf(
+            p("2024-01-01T10:00:00", "RS", "a"),
+            p("2024-01-03T10:00:00", "RS", "c"),
+            p("2024-01-02T10:00:00", "RS", "b"),
+            p("2024-02-01T10:00:00", "ME", "d"),
+            p("2024-03-01T10:00:00", "RS", "e"),
+        )
+        val first = buildTimeline(points).stays.first()
+        assertEquals(listOf("c", "b", "a"), stayPhotos(points, first).map { it.id })
+        val hidden = HiddenStay("RS", points[2].point.time, points[2].point.time)
+        assertEquals(listOf("c", "a"), stayPhotos(points, first, listOf(hidden)).map { it.id })
     }
 }

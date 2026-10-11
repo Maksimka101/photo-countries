@@ -25,6 +25,7 @@ class YandexDiskTest {
         assertEquals(20.25, p.lon)
         assertEquals(PhotoSource.YandexDisk, p.source)
         assertEquals("42:abc", p.id)
+        assertEquals(null, p.preview)
     }
 
     @Test
@@ -55,6 +56,7 @@ class YandexDiskTest {
         assertEquals(-70.5, p.lon)
         // Без resource_id точку опознаём по пути.
         assertEquals("disk:/Фотки/aA.jpg", p.id)
+        assertEquals("p", p.preview)
     }
 
     @Test

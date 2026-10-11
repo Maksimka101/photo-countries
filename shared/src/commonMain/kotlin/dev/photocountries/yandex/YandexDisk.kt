@@ -9,9 +9,12 @@ private const val API = "https://cloud-api.yandex.net/v1/disk/resources/files"
 private const val LAST_UPLOADED = "https://cloud-api.yandex.net/v1/disk/resources/last-uploaded"
 private const val PAGE = 500
 
-/** Из ответа нужны только путь, id и три поля EXIF — остальное (превью, размеры, хеши) диск не присылает. */
+/**
+ * Из ответа нужны только путь, id, три поля EXIF и ссылка превью — остальное (размеры, хеши) диск не присылает.
+ * Ссылка превью постоянная: по ней фото показывается и спустя время, без нового запроса к списку.
+ */
 private const val FIELDS =
-    "items.path,items.resource_id,items.exif.gps_latitude,items.exif.gps_longitude,items.exif.date_time"
+    "items.path,items.resource_id,items.preview,items.exif.gps_latitude,items.exif.gps_longitude,items.exif.date_time"
 
 /** Предохранитель от бесконечного листания, если диск вдруг перестанет отдавать пустую страницу. */
 private const val MAX_PAGES = 2000
@@ -59,11 +62,13 @@ private fun readItem(r: JsonReader, folders: List<String>): PhotoPoint? {
     var lat: Double? = null
     var lon: Double? = null
     var time: String? = null
+    var preview: String? = null
     r.beginObject()
     while (true) {
         when (r.nextName() ?: break) {
             "path" -> path = r.readStringOrNull()
             "resource_id" -> id = r.readStringOrNull()
+            "preview" -> preview = r.readStringOrNull()
             "exif" -> if (r.beginObjectOrSkip()) {
                 while (true) {
                     when (r.nextName() ?: break) {
@@ -80,7 +85,7 @@ private fun readItem(r: JsonReader, folders: List<String>): PhotoPoint? {
     if (path == null || folders.none { path.startsWith(it) }) return null
     if (lat == null || lon == null || time.isNullOrEmpty() || (lat == 0.0 && lon == 0.0)) return null
     val instant = Instant.parseOrNull(time) ?: return null
-    return PhotoPoint(instant, lat, lon, PhotoSource.YandexDisk, id ?: path)
+    return PhotoPoint(instant, lat, lon, PhotoSource.YandexDisk, id ?: path, preview)
 }
 
 /**

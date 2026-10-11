@@ -10,7 +10,8 @@ enum class PhotoSource { YandexDisk, Gallery }
 
 /**
  * Всё, что нужно от фото: когда и где снято. [id] — идентификатор фото в источнике, к нему
- * привязываются ручные игноры.
+ * привязываются ручные игноры. [preview] — ссылка на уменьшенную копию на диске (отдаётся только
+ * с токеном); у фото из галереи её нет, они показываются по [id].
  */
 data class PhotoPoint(
     val time: Instant,
@@ -18,6 +19,7 @@ data class PhotoPoint(
     val lon: Double,
     val source: PhotoSource,
     val id: String,
+    val preview: String? = null,
 )
 
 /** Точка с уже определённой страной (ISO 3166 alpha-2). */
@@ -35,15 +37,15 @@ fun locatePoints(points: List<PhotoPoint>, countries: CountryIndex): Located {
 private const val SAME_PLACE_DEG = 0.001
 
 /**
- * Фото из галереи, которых нет на диске. Автозагрузка кладёт на диск те же снимки, и без этого каждое
- * считалось бы дважды. Одно и то же фото — та же секунда съёмки и то же место.
+ * Фото из [points], которых нет в [other]. Автозагрузка кладёт на диск те же снимки, что лежат в галерее,
+ * и без этого каждый считался бы дважды. Одно и то же фото — та же секунда съёмки и то же место.
  */
-fun withoutDuplicates(gallery: List<PhotoPoint>, disk: List<PhotoPoint>): List<PhotoPoint> {
-    if (gallery.isEmpty() || disk.isEmpty()) return gallery
-    val bySecond = disk.groupBy { it.time.epochSeconds }
-    return gallery.filter { g ->
-        bySecond[g.time.epochSeconds].orEmpty().none {
-            kotlin.math.abs(it.lat - g.lat) < SAME_PLACE_DEG && kotlin.math.abs(it.lon - g.lon) < SAME_PLACE_DEG
+fun withoutDuplicates(points: List<PhotoPoint>, other: List<PhotoPoint>): List<PhotoPoint> {
+    if (points.isEmpty() || other.isEmpty()) return points
+    val bySecond = other.groupBy { it.time.epochSeconds }
+    return points.filter { p ->
+        bySecond[p.time.epochSeconds].orEmpty().none {
+            kotlin.math.abs(it.lat - p.lat) < SAME_PLACE_DEG && kotlin.math.abs(it.lon - p.lon) < SAME_PLACE_DEG
         }
     }
 }

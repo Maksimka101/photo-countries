@@ -35,11 +35,14 @@ interface AppStorage {
     suspend fun saveUi(prefs: UiPrefs)
 }
 
-private const val HEADER = "photo-countries points v1"
+private const val HEADER = "photo-countries points v2"
+
+/** Прежний формат, без ссылок превью. */
+private const val HEADER_V1 = "photo-countries points v1"
 
 /**
  * Текст кэша: заголовок, время выгрузки (секунды эпохи), дальше по строке на точку —
- * `секунды<TAB>широта<TAB>долгота<TAB>источник<TAB>id`.
+ * `секунды<TAB>широта<TAB>долгота<TAB>источник<TAB>id<TAB>превью` (превью пустое, если его нет).
  */
 fun encodePoints(cached: CachedPoints): String = buildString {
     append(HEADER).append('\n')
@@ -49,27 +52,41 @@ fun encodePoints(cached: CachedPoints): String = buildString {
         append(p.lat).append('\t')
         append(p.lon).append('\t')
         append(p.source.name).append('\t')
-        append(p.id.replace('\t', ' ').replace('\n', ' ')).append('\n')
+        append(p.id.clean()).append('\t')
+        append(p.preview.orEmpty().clean()).append('\n')
     }
 }
 
-/** Обратное к [encodePoints]. Любая битая строка — null: кэш проще перекачать, чем чинить. */
+private fun String.clean() = replace('\t', ' ').replace('\n', ' ')
+
+/**
+ * Обратное к [encodePoints]. Любая битая строка — null: кэш проще перекачать, чем чинить.
+ * Из кэша прежнего формата берутся только точки галереи: точки диска без превью показать нечем,
+ * и без них диск при обновлении перекачается целиком.
+ */
 fun decodePoints(lines: List<String>): CachedPoints? {
-    if (lines.size < 2 || lines[0] != HEADER) return null
+    if (lines.size < 2) return null
+    val columns = when (lines[0]) {
+        HEADER -> 6
+        HEADER_V1 -> 5
+        else -> return null
+    }
     val fetchedAt = lines[1].toLongOrNull() ?: return null
     val points = ArrayList<PhotoPoint>(lines.size)
     for (i in 2 until lines.size) {
         val line = lines[i]
         if (line.isEmpty()) continue
-        val parts = line.split('\t', limit = 5)
-        if (parts.size != 5) return null
+        val parts = line.split('\t')
+        if (parts.size != columns) return null
         val source = PhotoSource.entries.firstOrNull { it.name == parts[3] } ?: return null
+        if (columns == 5 && source == PhotoSource.YandexDisk) continue
         points += PhotoPoint(
             time = Instant.fromEpochSeconds(parts[0].toLongOrNull() ?: return null),
             lat = parts[1].toDoubleOrNull() ?: return null,
             lon = parts[2].toDoubleOrNull() ?: return null,
             source = source,
             id = parts[4],
+            preview = parts.getOrNull(5)?.ifEmpty { null },
         )
     }
     return CachedPoints(Instant.fromEpochSeconds(fetchedAt), points)
