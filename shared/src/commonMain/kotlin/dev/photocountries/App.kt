@@ -66,10 +66,14 @@ import dev.photocountries.ui.YearsScreen
 import dev.photocountries.ui.formatDate
 import dev.photocountries.ui.rememberCountryColors
 import kotlinx.coroutines.delay
+import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.minus
+import kotlinx.datetime.todayIn
 import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
+import kotlin.time.Clock
 
 /** Приложение целиком. Платформа даёт [model] — то, что живёт дольше экрана. */
 @Composable
@@ -305,9 +309,13 @@ private fun ReloadDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
     )
 }
 
-/** Строка под заголовком: идёт загрузка либо когда и сколько точек получено; ошибка — заметной плашкой. */
+/**
+ * Строка под заголовком: идёт загрузка либо сколько точек получено и когда обновлялся диск
+ * (галерея читается при каждом открытии, её дата ничего не говорит); ошибка — заметной плашкой.
+ */
 @Composable
 private fun StatusLine(state: AppState, modifier: Modifier) {
+    val lost = if (state.lostCount > 0) " · " + stringResource(Res.string.status_lost, state.lostCount) else ""
     val fetchedAt = state.fetchedAt
     val (text, isError) = when {
         state.loading && state.full -> stringResource(Res.string.status_loading, state.scanned) to false
@@ -317,10 +325,17 @@ private fun StatusLine(state: AppState, modifier: Modifier) {
         state.error == LoadError.Unauthorized -> stringResource(Res.string.error_unauthorized) to true
         state.error == LoadError.Failed -> stringResource(Res.string.error_failed) to true
         state.error == LoadError.GalleryDenied -> stringResource(Res.string.error_gallery) to true
+        fetchedAt != null && !state.hasToken -> stringResource(Res.string.status_points, state.pointCount) + lost to false
         fetchedAt != null -> {
-            val date = formatDate(fetchedAt.toLocalDateTime(TimeZone.currentSystemDefault()).date)
-            val base = stringResource(Res.string.status_updated, date, state.pointCount)
-            (if (state.lostCount > 0) "$base · " + stringResource(Res.string.status_lost, state.lostCount) else base) to false
+            val zone = TimeZone.currentSystemDefault()
+            val day = fetchedAt.toLocalDateTime(zone).date
+            val today = Clock.System.todayIn(zone)
+            val date = when (day) {
+                today -> stringResource(Res.string.date_today)
+                today.minus(1, DateTimeUnit.DAY) -> stringResource(Res.string.date_yesterday)
+                else -> formatDate(day)
+            }
+            stringResource(Res.string.status_updated, date, state.pointCount) + lost to false
         }
         else -> return
     }

@@ -258,9 +258,11 @@ class AppModel(
         var galleryPoints = points.filter { it.source == PhotoSource.Gallery }
         var newAfter = after
         var error: LoadError? = null
+        var diskRead = false
         if (t != null) {
             try {
                 diskPoints = loadDisk(t, full, diskPoints, preview)
+                diskRead = true
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -287,9 +289,10 @@ class AppModel(
         }
         val merged = diskPoints + galleryPoints
         val same = merged == points
-        // С ошибкой и без новых точек сохранять нечего: дата «обновлено» остаётся прежней.
+        // С ошибкой и без новых точек сохранять нечего. Дата «обновлено» — про диск: без него она прежняя.
         if (!same || error == null) {
-            val cached = CachedPoints(Clock.System.now(), merged)
+            val now = Clock.System.now()
+            val cached = CachedPoints(if (diskRead) now else _state.value.fetchedAt ?: now, merged)
             storage.savePoints(cached)
             if (newAfter != after) {
                 galleryAfter = newAfter

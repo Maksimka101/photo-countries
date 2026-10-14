@@ -14,7 +14,10 @@
     <string name="status_checking">Проверяем новые фото…</string>
     <string name="status_loading">Читаем диск… %1$d файлов</string>
     <string name="status_gallery">Читаем галерею… %1$d фото</string>
-    <string name="status_updated">Обновлено %1$s · %2$d точек</string>
+    <string name="status_updated">Диск обновлён %1$s · %2$d точек</string>
+    <string name="status_points">%1$d точек</string>
+    <string name="date_today">сегодня</string>
+    <string name="date_yesterday">вчера</string>
     <string name="status_lost">вне стран: %1$d</string>
     <string name="error_unauthorized">Диск не принял токен — войдите заново</string>
     <string name="error_gallery">Нет доступа к галерее — разрешите его в источниках</string>
