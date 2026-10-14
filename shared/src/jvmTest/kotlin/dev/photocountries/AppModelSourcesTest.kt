@@ -85,7 +85,7 @@ class AppModelSourcesTest {
         run(storage, gallery) { model ->
             val idle = model.await { true }
             assertFalse(idle.connected)
-            assertTrue(idle.galleryAvailable)
+            assertEquals(GalleryStatus.Off, idle.gallery)
 
             model.connectGallery()
             val first = model.await { it.timeline?.stays?.isNotEmpty() == true }
@@ -101,7 +101,7 @@ class AppModelSourcesTest {
             assertEquals(listOf(paris, belgrade), storage.points!!.points)
 
             model.disconnectGallery()
-            val off = model.await { !it.galleryOn }
+            val off = model.await { it.gallery == GalleryStatus.Off }
             assertFalse(off.connected)
             assertNull(storage.gallery)
             assertEquals(emptyList(), storage.points!!.points)
@@ -135,8 +135,8 @@ class AppModelSourcesTest {
         val storage = MemoryStorage(points = CachedPoints(Instant.parse("2024-07-01T00:00:00Z"), listOf(paris)))
         storage.gallery = 1
         run(storage, FakeGallery(listOf(paris), denied = true)) { model ->
-            val state = model.await { it.error != null }
-            assertEquals(LoadError.GalleryDenied, state.error)
+            val state = model.await { it.load is LoadStatus.Error }
+            assertEquals(LoadStatus.Error(LoadError.GalleryDenied), state.load)
             assertEquals(listOf("FR"), state.timeline!!.stays.map { it.country })
             assertEquals(1L, storage.gallery)
         }

@@ -40,25 +40,34 @@ import kotlin.time.Instant
 /** Что пошло не так при обновлении; текст для экрана подбирает UI. */
 enum class LoadError { Unauthorized, Failed, GalleryDenied }
 
+/** Галерея телефона: на этой платформе её нет, есть, но не подключена, или подключена. */
+enum class GalleryStatus { Unavailable, Off, On }
+
+/** Что сейчас читается: [Checking] — ищем новые фото, [Disk] — диск качается целиком, [Gallery] — читается галерея. */
+enum class LoadStage { Checking, Disk, Gallery }
+
+/** Обновление: не идёт, идёт или кончилось ошибкой — одновременно не бывает двух. */
+sealed interface LoadStatus {
+    data object Idle : LoadStatus
+
+    /** [scanned] — сколько файлов просмотрено на этом этапе. */
+    data class Loading(val stage: LoadStage = LoadStage.Checking, val scanned: Int = 0) : LoadStatus
+
+    data class Error(val error: LoadError) : LoadStatus
+}
+
 /**
  * Состояние приложения. [started] — токен и кэш уже прочитаны (до этого экран источников не показываем).
- * Источников два, нужен хотя бы один: диск ([hasToken]) и галерея телефона ([galleryOn]); [galleryAvailable] —
- * есть ли галерея на этой платформе.
+ * Источников два, нужен хотя бы один: диск ([hasToken]) и галерея телефона ([gallery]).
  * [timeline] null — данных ещё нет; при первой загрузке она неполная и растёт, пока [loading].
- * [full] — сейчас перекачивается весь диск, [scanningGallery] — читается галерея; [scanned] — сколько файлов
- * при этом просмотрено. [hidden] — пребывания, скрытые вручную: в [timeline] их уже нет.
+ * [hidden] — пребывания, скрытые вручную: в [timeline] их уже нет.
  * [ui] — открытая вкладка и сортировка стран; переживают перезапуск.
  */
 data class AppState(
     val started: Boolean = false,
     val hasToken: Boolean = false,
-    val galleryOn: Boolean = false,
-    val galleryAvailable: Boolean = false,
-    val loading: Boolean = false,
-    val full: Boolean = false,
-    val scanningGallery: Boolean = false,
-    val scanned: Int = 0,
-    val error: LoadError? = null,
+    val gallery: GalleryStatus = GalleryStatus.Unavailable,
+    val load: LoadStatus = LoadStatus.Idle,
     val fetchedAt: Instant? = null,
     val pointCount: Int = 0,
     val lostCount: Int = 0,
@@ -67,7 +76,9 @@ data class AppState(
     val ui: UiPrefs = UiPrefs(),
 ) {
     /** Подключён хотя бы один источник. */
-    val connected: Boolean get() = hasToken || galleryOn
+    val connected: Boolean get() = hasToken || gallery == GalleryStatus.On
+
+    val loading: Boolean get() = load is LoadStatus.Loading
 }
 
 /** Фото одного пребывания, свежие первыми. [diskToken] — токен диска: без него его превью не отдаются. */
@@ -84,7 +95,7 @@ class AppModel(
     private val gallery: Gallery? = null,
     private val loadCountries: suspend () -> CountryIndex = { CountryIndex.parse(Res.readBytes("files/countries.bin")) },
 ) {
-    private val _state = MutableStateFlow(AppState(galleryAvailable = gallery != null))
+    private val _state = MutableStateFlow(AppState(gallery = if (gallery != null) GalleryStatus.Off else GalleryStatus.Unavailable))
     val state: StateFlow<AppState> = _state
 
     // Токен, точки и скрытое читает ещё и экран ([photosOf]), из своего потока.
@@ -121,7 +132,7 @@ class AppModel(
             _state.update { it.copy(hidden = hidden, ui = ui) }
             val cached = storage.loadPoints()
             if (cached != null) show(cached)
-            _state.update { it.copy(started = true, hasToken = token != null, galleryOn = galleryAfter != null) }
+            _state.update { it.copy(started = true, hasToken = token != null, gallery = galleryStatus()) }
             refresh()
         }
     }
@@ -141,7 +152,7 @@ class AppModel(
             startJob?.join()
             token = t
             storage.saveToken(t)
-            _state.update { it.copy(hasToken = true, error = null) }
+            _state.update { it.copy(hasToken = true, load = it.load.withoutError()) }
             load(full = false, queue = true)
         }
     }
@@ -158,7 +169,7 @@ class AppModel(
                 galleryAfter = 0
                 storage.saveGallery(0)
             }
-            _state.update { it.copy(galleryOn = true, error = null) }
+            _state.update { it.copy(gallery = GalleryStatus.On, load = it.load.withoutError()) }
             load(full = false, queue = true)
         }
     }
@@ -182,7 +193,7 @@ class AppModel(
             val cached = CachedPoints(_state.value.fetchedAt ?: Clock.System.now(), points.filter { it.source != source })
             storage.savePoints(cached)
             show(cached)
-            _state.update { it.copy(hasToken = token != null, galleryOn = galleryAfter != null, loading = false, error = null) }
+            _state.update { it.copy(hasToken = token != null, gallery = galleryStatus(), load = LoadStatus.Idle) }
             refresh()
         }
     }
@@ -250,7 +261,7 @@ class AppModel(
     private suspend fun update(full: Boolean) {
         val t = token
         val after = galleryAfter
-        _state.update { it.copy(loading = true, full = false, scanningGallery = false, scanned = 0, error = null) }
+        _state.update { it.copy(load = LoadStatus.Loading()) }
         // Пока показывать нечего, лента растёт по страницам. Поверх прошлой полной ленты
         // неполную не ставим — она сменится разом в конце.
         val preview = if (points.isEmpty()) Preview() else null
@@ -272,9 +283,9 @@ class AppModel(
         if (gallery != null && after != null) {
             try {
                 val from = if (full) 0 else after
-                _state.update { it.copy(full = false, scanningGallery = true, scanned = 0) }
+                _state.update { it.copy(load = LoadStatus.Loading(LoadStage.Gallery)) }
                 val scan = gallery.scan(from) { seen, page ->
-                    _state.update { it.copy(scanned = seen) }
+                    _state.update { it.copy(load = LoadStatus.Loading(LoadStage.Gallery, seen)) }
                     preview?.add(page)
                 }
                 // Просмотр с начала заменяет точки галереи, иначе новые добавляются к прежним.
@@ -300,7 +311,7 @@ class AppModel(
             }
             if (same && preview == null) _state.update { it.copy(fetchedAt = cached.fetchedAt) } else show(cached)
         }
-        _state.update { it.copy(loading = false, error = error) }
+        _state.update { it.copy(load = if (error == null) LoadStatus.Idle else LoadStatus.Error(error)) }
     }
 
     /** Точки диска после обновления: прежние плюс новые либо, если так не выходит, скачанные заново. */
@@ -311,9 +322,9 @@ class AppModel(
             if (fresh != null) return old + fresh
             // До знакомых фото не дошли — качаем всё.
         }
-        _state.update { it.copy(full = true) }
+        _state.update { it.copy(load = LoadStatus.Loading(LoadStage.Disk)) }
         return disk.fetchPoints(t) { seen, page ->
-            _state.update { it.copy(scanned = seen) }
+            _state.update { it.copy(load = LoadStatus.Loading(LoadStage.Disk, seen)) }
             preview?.add(page)
         }
     }
@@ -336,6 +347,15 @@ class AppModel(
             _state.update { it.copy(pointCount = partial.size, lostCount = lost, timeline = timeline) }
         }
     }
+
+    private fun galleryStatus() = when {
+        gallery == null -> GalleryStatus.Unavailable
+        galleryAfter == null -> GalleryStatus.Off
+        else -> GalleryStatus.On
+    }
+
+    /** Ошибку прошлого обновления убираем, идущее не трогаем. */
+    private fun LoadStatus.withoutError() = if (this is LoadStatus.Error) LoadStatus.Idle else this
 
     private suspend fun countryIndex(): CountryIndex = countries ?: loadCountries().also { countries = it }
 

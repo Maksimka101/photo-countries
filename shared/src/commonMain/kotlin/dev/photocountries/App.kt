@@ -317,14 +317,18 @@ private fun ReloadDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
 private fun StatusLine(state: AppState, modifier: Modifier) {
     val lost = if (state.lostCount > 0) " · " + stringResource(Res.string.status_lost, state.lostCount) else ""
     val fetchedAt = state.fetchedAt
+    val load = state.load
     val (text, isError) = when {
-        state.loading && state.full -> stringResource(Res.string.status_loading, state.scanned) to false
-        state.loading && state.scanningGallery && state.scanned > 0 ->
-            stringResource(Res.string.status_gallery, state.scanned) to false
-        state.loading -> stringResource(Res.string.status_checking) to false
-        state.error == LoadError.Unauthorized -> stringResource(Res.string.error_unauthorized) to true
-        state.error == LoadError.Failed -> stringResource(Res.string.error_failed) to true
-        state.error == LoadError.GalleryDenied -> stringResource(Res.string.error_gallery) to true
+        load is LoadStatus.Loading -> when {
+            load.stage == LoadStage.Disk -> stringResource(Res.string.status_loading, load.scanned)
+            load.stage == LoadStage.Gallery && load.scanned > 0 -> stringResource(Res.string.status_gallery, load.scanned)
+            else -> stringResource(Res.string.status_checking)
+        } to false
+        load is LoadStatus.Error -> when (load.error) {
+            LoadError.Unauthorized -> stringResource(Res.string.error_unauthorized)
+            LoadError.Failed -> stringResource(Res.string.error_failed)
+            LoadError.GalleryDenied -> stringResource(Res.string.error_gallery)
+        } to true
         fetchedAt != null && !state.hasToken -> stringResource(Res.string.status_points, state.pointCount) + lost to false
         fetchedAt != null -> {
             val zone = TimeZone.currentSystemDefault()

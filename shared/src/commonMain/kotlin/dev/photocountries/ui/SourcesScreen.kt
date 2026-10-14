@@ -32,7 +32,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import dev.photocountries.AppState
+import dev.photocountries.GalleryStatus
 import dev.photocountries.LoadError
+import dev.photocountries.LoadStatus
 import dev.photocountries.shared.*
 import dev.photocountries.yandex.authorizeUrl
 import org.jetbrains.compose.resources.stringResource
@@ -140,9 +142,10 @@ private fun GalleryCard(state: AppState, onOn: () -> Unit, onOff: () -> Unit) {
     } ?: return
     SourceCard(stringResource(Res.string.gallery_title), stringResource(Res.string.gallery_about)) {
         // Разрешение отозвали уже после подключения — даём вернуть его, не теряя прочитанное.
-        val lost = state.galleryOn && state.error == LoadError.GalleryDenied
+        val on = state.gallery == GalleryStatus.On
+        val lost = on && state.load == LoadStatus.Error(LoadError.GalleryDenied)
         if (denied || lost) Warning(stringResource(Res.string.gallery_denied))
-        if (state.galleryOn) {
+        if (on) {
             if (lost) Button(onClick = request, modifier = Modifier.fillMaxWidth()) { Text(stringResource(Res.string.gallery_allow)) }
             Connected(onOff)
         } else {
